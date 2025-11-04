@@ -133,7 +133,7 @@
                     {{ render_textarea(field) }}
                 {% elif field.type == "DateField" %}
                     {{ render_datepicker(field) }}
-                {% elif field.type == "TextField" %}
+                {% elif field.type == "StringField" %}
                     {% if focus %}
                         {{ render_input(field) }}
                         {% set focus = False %}
@@ -211,7 +211,7 @@
                     {{ render_textarea(field) }}
                 {% elif field.type == "DateField" %}
                     {{ render_datepicker(field) }}
-                {% elif field.type == "TextField" %}
+                {% elif field.type == "StringField" %}
                     {% if focus %}
                         {{ render_input(field) }}
                         {% set focus = False %}

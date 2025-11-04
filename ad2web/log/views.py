@@ -2,7 +2,7 @@
 
 import os
 import numbers
-import cgi
+import html
 
 from flask import Blueprint, render_template, abort, g, request, flash, Response, url_for, redirect
 from flask import current_app as APP
@@ -77,13 +77,11 @@ def alarmdecoder_logfile():
 @login_required
 @admin_required
 def get_log_data(lines):
-    log_file = os.path.join(INSTANCE_FOLDER_PATH, 'logs', 'info.log')
-
+    log_file = os.path.join(INSTANCE_FOLDER_PATH, "logs", "info.log")
     try:
         log_text = LogWatcher.tail(log_file, lines)
-    except IOError, err:
+    except IOError as err:
         return json.dumps([str(err)])
-
     return json.dumps(log_text)
 
 #XHR for retrieving event log data server side
@@ -95,7 +93,7 @@ def get_events_paging_data():
     try:
         #get results from datatable via XHR
         results = DataTablesServer(request).output_result()
-    except TypeError, ex:
+    except TypeError as ex:
         APP.logger.warning("Error processing datatables request: {0}".format(ex))
 
     return json.dumps(results)
@@ -115,7 +113,7 @@ class DataTablesServer:
 
     def output_result(self):
         output = {}
-        output['sEcho'] = cgi.escape(str(int(self.request_values['sEcho'])))
+        output['sEcho'] = html.escape(str(int(self.request_values['sEcho'])))
         output['iTotalRecords'] = int(self.cardinality);
         output['iTotalDisplayRecords'] = int(self.cardinality);
 
@@ -135,40 +133,32 @@ class DataTablesServer:
 
     def run_queries(self):
         pages = self.paging()
-        filter = self.filtering()
+        search_filter = self.filtering()
 
-        #page to start on
-        start = 0
-        #number of records to return
-        limit = 10
+        start = pages.start or 0
+        limit = pages.length or 10
 
-        #non-default values chosen from the UI
-        if pages.start is not None:
-            start = pages.start
-        if pages.length is not None:
-            limit = pages.length
-
-        #if filtered, cardinality based off filter, otherwise all rows
-        if filter is not None:
-            try:
-                self.result_data = EventLogEntry.query.filter(EventLogEntry.message.like('%' + filter + '%')).order_by(EventLogEntry.timestamp.desc()).limit(limit).offset(start)
-                self.cardinality_filtered = self.result_data.count()
-                self.cardinality = EventLogEntry.query.filter(EventLogEntry.message.like('%' + filter + '%')).count()
-            except Exception, err:
-                pass
-        else:
-            try:
-                self.result_data = EventLogEntry.query.order_by(EventLogEntry.timestamp.desc()).limit(limit).offset(start)
-                self.cardinality_filtered = self.result_data.count()
-                self.cardinality = EventLogEntry.query.order_by(EventLogEntry.timestamp.desc()).count()
-            except Exception, err:
-                pass
+        try:
+            if search_filter:
+                query = EventLogEntry.query.filter(EventLogEntry.message.like(f"%{search_filter}%"))
+                self.result_data = (
+                    query.order_by(EventLogEntry.timestamp.desc()).limit(limit).offset(start)
+                )
+                self.cardinality_filtered = query.count()
+                self.cardinality = query.count()
+            else:
+                query = EventLogEntry.query.order_by(EventLogEntry.timestamp.desc())
+                self.result_data = query.limit(limit).offset(start)
+                self.cardinality_filtered = query.count()
+                self.cardinality = query.count()
+        except Exception as e:
+            APP.logger.error(f"Error querying event logs: {e}")
 
     #here we determine the filter value for the search box and apply to the queries
     def filtering(self):
         filter = None
-        if( self.request_values.has_key('sSearch')) and (self.request_values['sSearch'] != "" ):
-            filter = cgi.escape(str(self.request_values['sSearch']))
+        if( 'sSearch' in self.request_values) and (self.request_values['sSearch'] != "" ):
+            filter = html.escape(str(self.request_values['sSearch']))
 
         return filter
 
@@ -179,7 +169,7 @@ class DataTablesServer:
             if self.request_values['iDisplayStart'].isdigit() is False or self.request_values['iDisplayLength'].isdigit() is False:
                 return pages
 
-            pages.start = int(cgi.escape(self.request_values['iDisplayStart']))
-            pages.length = int(cgi.escape(self.request_values['iDisplayLength']))
+            pages.start = int(html.escape(self.request_values['iDisplayStart']))
+            pages.length = int(html.escape(self.request_values['iDisplayLength']))
 
-        return pages;
+        return pages

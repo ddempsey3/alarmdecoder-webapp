@@ -1,9 +1,9 @@
-import os
+import subprocess
 
-import ConfigParser
+import os
+import configparser
 import psutil
 import signal
-import sh
 from collections import OrderedDict
 from OpenSSL import crypto
 
@@ -40,7 +40,7 @@ def read_config(path):
     :type path: string
     :returns: A SafeConfigParser to operate on the configuration.
     """
-    config = ConfigParser.SafeConfigParser()
+    config = configparser.SafeConfigParser()
     config.read(path)
 
     return config
@@ -58,13 +58,13 @@ def save_config(path, config_values):
 
     try:
         config.add_section('ser2sock')
-    except ConfigParser.DuplicateSectionError:
+    except configparser.DuplicateSectionError:
         pass
 
     # Include default entries
-    config_entries = OrderedDict(DEFAULT_SETTINGS.items() + config_values.items())
+    config_entries = OrderedDict(list(DEFAULT_SETTINGS.items()) + list(config_values.items()))
 
-    for k, v in config_entries.iteritems():
+    for k, v in list(config_entries.items()):
         config.set('ser2sock', k, str(v))
 
     with open(path, 'w') as configfile:
@@ -76,16 +76,14 @@ def exists():
 
     :returns: Whether or not ser2sock exists in the path.
     """
-    return sh.which('ser2sock') is not None
+    result = subprocess.run(["which", "ser2sock"], capture_output=True, text=True, check=True)
+    return result.stdout is not None
 
 def start():
     """
     Starts ser2sock
     """
-    try:
-        sh.ser2sock('-d', _bg=True)
-    except sh.CommandNotFound, err:
-        raise NotFound('Could not locate ser2sock.')
+    result = subprocess.Popen(["ser2sock", "-d"], capture_output=True, text=True, check=True)
 
 def stop():
     """
@@ -106,7 +104,7 @@ def hup():
             if proc.name() == 'ser2sock':
                 found = True
                 os.kill(proc.pid, signal.SIGHUP)
-        except OSError, err:
+        except OSError as err:
             raise HupFailed('Error attempting to restart ser2sock (pid {0}): {1}'.format(proc.pid, err))
 
     if not found:
@@ -138,22 +136,22 @@ def update_config(path, *args, **kwargs):
                     config_values[k] = v
 
             # Set any settings that were provided in our kwargs.
-            if 'device_path' in kwargs.keys():
+            if 'device_path' in list(kwargs.keys()):
                 config_values['device'] = kwargs['device_path']
-            if 'device_baudrate' in kwargs.keys():
+            if 'device_baudrate' in list(kwargs.keys()):
                 config_values['baudrate'] = kwargs['device_baudrate']
-            if 'device_port' in kwargs.keys():
+            if 'device_port' in list(kwargs.keys()):
                 config_values['port'] = kwargs['device_port']
-            if 'use_ssl' in kwargs.keys():
+            if 'use_ssl' in list(kwargs.keys()):
                 config_values['encrypted'] = int(kwargs['use_ssl'])
 
             if 'encrypted' in config_values and config_values['encrypted'] == 1:
                 cert_path = os.path.join(path, 'certs')
                 if not os.path.exists(cert_path):
-                    os.mkdir(cert_path, 0700)
+                    os.mkdir(cert_path, 0o700)
 
-                ca_cert = kwargs['ca_cert'] if 'ca_cert' in kwargs.keys() else None
-                server_cert = kwargs['server_cert'] if 'server_cert' in kwargs.keys() else None
+                ca_cert = kwargs['ca_cert'] if 'ca_cert' in list(kwargs.keys()) else None
+                server_cert = kwargs['server_cert'] if 'server_cert' in list(kwargs.keys()) else None
 
                 if ca_cert is not None and server_cert is not None:
                     ca_cert.export(cert_path)
@@ -166,5 +164,5 @@ def update_config(path, *args, **kwargs):
             save_config(os.path.join(path, 'ser2sock.conf'), config_values)
             hup()
 
-    except (OSError, IOError), err:
+    except (OSError, IOError) as err:
         raise RuntimeError('Error updating ser2sock configuration: {0}'.format(err))

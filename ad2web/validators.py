@@ -5,7 +5,7 @@ from wtforms.validators import ValidationError
 class PathExists(object):
     def __init__(self, message=None):
         if not message:
-            message = u'Path does not exist.'
+            message = 'Path does not exist.'
 
         self.message = message
 
@@ -18,7 +18,7 @@ class PathExists(object):
 class Hex(object):
     def __init__(self, message=None):
         if not message:
-            message = u'Number must be hexadecimal.'
+            message = 'Number must be hexadecimal.'
 
         self.message = message
 

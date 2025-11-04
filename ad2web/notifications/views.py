@@ -2,7 +2,7 @@ from flask import (Blueprint, render_template, current_app, request, flash,
                     redirect, url_for, abort)
 from flask_login import login_required, current_user
 
-from wtforms import FormField, TextField
+from wtforms import FormField, StringField
 from sqlalchemy.orm.session import make_transient
 
 from ..extensions import db
@@ -49,6 +49,7 @@ def notifications_context_processor():
 @notifications.route('/')
 @login_required
 def index():
+    print("/")
     use_ssl = Setting.get_by_name('use_ssl', default=False).value
     notification_list = Notification.query.all()
 
@@ -60,6 +61,7 @@ def index():
 @notifications.route('/<int:id>/edit', methods=['GET', 'POST'])
 @login_required
 def edit(id):
+    print("edit")
     notification = Notification.query.filter_by(id=id).first_or_404()
     if notification.user != current_user and not current_user.is_admin():
         abort(403)
@@ -100,6 +102,7 @@ def edit(id):
 @notifications.route('/create', methods=['GET', 'POST'])
 @login_required
 def create():
+    print("create")
     form = CreateNotificationForm()
 
     if form.validate_on_submit():
@@ -116,17 +119,30 @@ def create():
 @notifications.route('/create/<string:type>', methods=['GET', 'POST'])
 @login_required
 def create_by_type(type):
-    if type not in NOTIFICATION_TYPE_DETAILS.keys():
+    print("create: " + type)
+    if type not in list(NOTIFICATION_TYPE_DETAILS.keys()):
         abort(404)
 
     type_id, form_type = NOTIFICATION_TYPE_DETAILS[type]
     form = form_type()
     form.type.data = type_id
 
+    if form.validate():
+        print("valid")
+
+    print(form.errors)
+
+    print(type_id)
+    print(form)
+    print("form submit: " + str(form.is_submitted()))
+    print("form validate_on_submit: " + str(form.validate_on_submit()))
+
+
     if not form.is_submitted():
         form.subscriptions.data = [str(k) for k in DEFAULT_SUBSCRIPTIONS]
 
     if form.validate_on_submit():
+        print("create on submit")
         obj = Notification()
 
         obj.type = form.type.data
@@ -153,6 +169,7 @@ def create_by_type(type):
                             ssl=use_ssl, legend=form.legend)
 
 def build_zone_list():
+    print("build_zone_list")
     zone_list = [(str(i), "Zone {0:02d}".format(i)) for i in range(1, 100)]
 
     zones = Zone.query.all()
@@ -166,6 +183,7 @@ def build_zone_list():
 @notifications.route('/<int:id>/zones', methods=['GET', 'POST'])
 @login_required
 def zone_filter(id):
+    print("zone_filter")
     form = ZoneFilterForm()
     form.zones.choices = build_zone_list()
 
@@ -186,6 +204,7 @@ def zone_filter(id):
 @notifications.route('/<int:id>/remove', methods=['GET', 'POST'])
 @login_required
 def remove(id):
+    print("remove")
     notification = Notification.query.filter_by(id=id).first_or_404()
     if notification.user != current_user and not current_user.is_admin():
         abort(403)
@@ -201,6 +220,7 @@ def remove(id):
 @notifications.route('/<int:id>/copy', methods=['GET', 'POST'])
 @login_required
 def copy_notification(id):
+    print("copy_notification")
     notification = Notification.query.filter_by(id=id).first_or_404()
     desc = notification.description
 
@@ -232,6 +252,7 @@ def copy_notification(id):
 @notifications.route('/<int:id>/toggle', methods=['GET', 'POST'])
 @login_required
 def toggle_notification(id):
+    print("toggle_notification")
     notification = Notification.query.filter_by(id=id).first_or_404()
 
     if notification.user != current_user and not current_user.is_admin():
@@ -239,7 +260,7 @@ def toggle_notification(id):
 
     status = "Enabled"
 
-    if notification.enabled is 0:
+    if notification.enabled == 0:
         notification.enabled = 1
         status = "Enabled"
     else:
@@ -257,6 +278,7 @@ def toggle_notification(id):
 @notifications.route('/<int:id>/review', methods=['GET', 'POST'])
 @login_required
 def review(id):
+    print("review")
     form = ReviewNotificationForm()
 
     notification = Notification.query.filter_by(id=id).first_or_404()
@@ -283,6 +305,7 @@ def review(id):
 @notifications.route('/messages', methods=['GET'])
 @login_required
 def messages():
+    print("messages")
     if not current_user.is_admin():
         abort(403)
 
@@ -295,6 +318,7 @@ def messages():
 @notifications.route('/messages/edit/<int:id>', methods=['GET', 'POST'])
 @login_required
 def edit_message(id):
+    print("edit_mesages")
     if not current_user.is_admin():
         abort(403)
 

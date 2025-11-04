@@ -9,7 +9,7 @@ import jsonpickle
 
 from flask import Flask, request, render_template, g, redirect, url_for
 from flask_babel import Babel
-from flask_script import Manager
+from flask_socketio import SocketIO
 
 from alarmdecoder import AlarmDecoder
 from alarmdecoder.devices import SerialDevice
@@ -33,7 +33,6 @@ from .setup import setup
 from .extensions import db, mail, login_manager, oid
 from .utils import INSTANCE_FOLDER_PATH
 from .cameras import cameras
-
 # For import *
 __all__ = ['create_app']
 
@@ -55,7 +54,9 @@ DEFAULT_BLUEPRINTS = (
     cameras,
 )
 
-class ReverseProxied(object):
+class ReverseProxied:
+    """Middleware to handle reverse proxy headers."""
+
     '''Wrap the application in this middleware and configure the
     front-end server to add these headers, to let you quietly bind
     this to a URL other than / and to an HTTP scheme that is
@@ -72,60 +73,50 @@ class ReverseProxied(object):
 
     :param app: the WSGI application
     '''
-    def __init__(self, app, num_proxies=1):
-        self.app = app
+    def __init__(self, wsgi_app, num_proxies=1):
+        self.app = wsgi_app
         self.num_proxies = num_proxies
 
     def get_remote_addr(self, forwarded_for):
-        """Selects the new remote addr from given list of ips in X-Forwarded-For
-        By default it picks the one that the num_proxies proxy server provides.
-        """
-
+        forwarded_for = [x.strip() for x in forwarded_for if x.strip()]
         if len(forwarded_for) >= self.num_proxies:
-            return forwarded_for[-1 * self.num_proxies]
+            return forwarded_for[-self.num_proxies]
+        return None
 
     def __call__(self, environ, start_response):
-        # Adapted from werkzeug fixer ProxyFix
         getter = environ.get
-        forwarded_proto = getter('HTTP_X_FORWARDED_PROTO', '')
-        forwarded_for = getter('HTTP_X_FORWARDED_FOR', '').split(',')
-        forwarded_host = getter('HTTP_X_FORWARDED_HOST', '')
+        forwarded_proto = getter("HTTP_X_FORWARDED_PROTO", "")
+        forwarded_for_str = getter("HTTP_X_FORWARDED_FOR", "")
+        forwarded_host = getter("HTTP_X_FORWARDED_HOST", "")
+        script_name = getter("HTTP_X_SCRIPT_NAME", "")
+        scheme = getter("HTTP_X_SCHEME", "")
+        server = getter("HTTP_X_FORWARDED_SERVER", "")
 
-        environ.update({
-            'werkzeug.proxy_fix.orig_wsgi_url_scheme': getter('wsgi.url_scheme'),
-            'werkzeug.proxy_fix.orig_remote_addr': getter('REMOTE_ADDR'),
-            'werkzeug.proxy_fix.orig_http_host': getter('HTTP_HOST')
-        })
-
-        forwarded_for = [x for x in [x.strip() for x in forwarded_for] if x]
-        remote_addr = self.get_remote_addr(forwarded_for)
-
-        if remote_addr is not None:
-            environ['REMOTE_ADDR'] = remote_addr
-
-        if forwarded_host:
-            environ['HTTP_HOST'] = forwarded_host
-
-        script_name = environ.get('HTTP_X_SCRIPT_NAME', '')
-        if script_name:
-            environ['SCRIPT_NAME'] = script_name
-            path_info = environ['PATH_INFO']
-            if path_info.startswith(script_name):
-                environ['PATH_INFO'] = path_info[len(script_name):]
-
-        scheme = environ.get('HTTP_X_SCHEME', '')
         if scheme:
-            environ['wsgi.url_scheme'] = scheme
+            environ["wsgi.url_scheme"] = scheme
+        elif forwarded_proto:
+            environ["wsgi.url_scheme"] = forwarded_proto
 
-        if forwarded_proto:
-            environ['wsgi.url_scheme'] = forwarded_proto
-
-        server = environ.get('HTTP_X_FORWARDED_SERVER', '')
         if server:
-            environ['HTTP_HOST'] = server
+            environ["HTTP_HOST"] = server
+        elif forwarded_host:
+            environ["HTTP_HOST"] = forwarded_host
+
+        if forwarded_for_str:
+            remote = self.get_remote_addr(forwarded_for_str.split(","))
+            if remote:
+                environ["REMOTE_ADDR"] = remote
+
+        if script_name:
+            orig_sn = environ.get("SCRIPT_NAME", "")
+            orig_pi = environ.get("PATH_INFO", "")
+            combined = f"{orig_sn.rstrip('/')}/{script_name.lstrip('/')}"
+            environ["SCRIPT_NAME"] = combined
+            if orig_pi.startswith(script_name):
+                new_pi = orig_pi[len(script_name) :]
+                environ["PATH_INFO"] = new_pi if new_pi.startswith("/") else f"/{new_pi}"
 
         return self.app(environ, start_response)
-
 def create_app(config=None, app_name=None, blueprints=None):
     """Create a Flask app."""
 
@@ -135,7 +126,10 @@ def create_app(config=None, app_name=None, blueprints=None):
         blueprints = DEFAULT_BLUEPRINTS
 
     app = Flask(app_name, instance_path=INSTANCE_FOLDER_PATH, instance_relative_config=True)
-    app.wsgi_app = ReverseProxied(app.wsgi_app)
+    app.wsgi_app = ReverseProxied(
+        app.wsgi_app,
+        num_proxies=app.config.get("NUM_PROXIES", 1),
+        )
 
     configure_app(app, config)
     configure_hook(app)
@@ -147,7 +141,7 @@ def create_app(config=None, app_name=None, blueprints=None):
 
     appsocket = create_decoder_socket(app)
     decoder = Decoder(app, appsocket)
-    manager = Manager(app)
+    # manager = Manager(app)
     app.decoder = decoder
 
     return app, appsocket
@@ -163,7 +157,7 @@ def init_app(app, appsocket):
 
         # Make sure the database exists.
         with app.app_context():
-            if db.metadata.tables['settings'].exists(db.engine):
+            if 'settings' in db.metadata.tables:
                 app.decoder.init()
                 app.decoder.start()
             else:
@@ -184,6 +178,8 @@ def configure_app(app, config=None):
 
     if config:
         app.config.from_object(config)
+    
+    # app.config['SQLALCHEMY_ECHO'] = True
 
     # Use instance folder instead of env variables to make deployment easier.
     #app.config.from_envvar('%s_APP_CONFIG' % DefaultConfig.PROJECT.upper(), silent=True)
@@ -196,13 +192,13 @@ def configure_extensions(app):
     # flask-mail
     mail.init_app(app)
 
-    # flask-babel
-    babel = Babel(app)
-
-    @babel.localeselector
     def get_locale():
         accept_languages = app.config.get('ACCEPT_LANGUAGES')
         return request.accept_languages.best_match(accept_languages)
+
+    # flask-babel
+    babel = Babel(app)
+    babel.init_app(app, locale_selector=get_locale)
 
     # flask-login
     login_manager.login_view = 'frontend.login'
@@ -278,6 +274,9 @@ def configure_hook(app):
         if request.blueprint == 'setup':
             setup_stage = Setting.get_by_name('setup_stage').value
             # If setup hasn't been started, redirect to the index
+            print(request.endpoint)
+            print(setup_stage)
+            print(SETUP_ENDPOINT_STAGE)
             if setup_stage is None:
                 if request.endpoint != 'setup.index' and request.endpoint != 'setup.type':
                     return redirect(url_for('setup.index'))

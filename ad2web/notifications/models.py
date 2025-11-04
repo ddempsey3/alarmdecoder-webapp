@@ -21,7 +21,7 @@ class Notification(db.Model):
                                 cascade="all, delete-orphan")
 
     def get_setting(self, name, default=None):
-        if name in self.settings.keys():
+        if name in list(self.settings.keys()):
             return self.settings[name].value
 
         return default

@@ -2,14 +2,14 @@
 
 import os
 import json
-import urllib
+import urllib.request, urllib.parse, urllib.error
 import zipfile
 
 from flask import Blueprint, render_template, abort, g, request, flash, Response, redirect, url_for, jsonify
 from flask import current_app as APP
 from flask_login import login_required, current_user
 
-from werkzeug import secure_filename
+from werkzeug.utils import secure_filename
 
 from ..extensions import db
 from ..decorators import admin_required
@@ -59,7 +59,7 @@ def checkavailable():
 @admin_required
 def check_for_updates():
     APP.decoder.updates = APP.decoder.updater.check_updates()
-    update_available = not all(not needs_update for component, (needs_update, branch, revision, new_revision, status, project_url) in APP.decoder.updates.iteritems())
+    update_available = not all(not needs_update for component, (needs_update, branch, revision, new_revision, status, project_url) in list(APP.decoder.updates.items()))
     APP.jinja_env.globals['update_available'] = update_available
 
     return redirect(url_for('update.index'))
@@ -76,7 +76,7 @@ def update_firmware():
     form.firmware_file_json.choices = []
     data = None
     try:
-        response = urllib.urlopen(FIRMWARE_JSON_URL)
+        response = urllib.request.urlopen(FIRMWARE_JSON_URL)
     except IOError:
         flash('Cannot connect to alarmdecoder server', 'error')
         all_ok = "false"
@@ -91,7 +91,7 @@ def update_firmware():
 
     if form.validate_on_submit():
         file_name = form.firmware_file_json.data
-        zip, headers = urllib.urlretrieve(file_name)
+        zip, headers = urllib.request.urlretrieve(file_name)
         return_data = {}
 
         with zipfile.ZipFile(zip) as zf:
@@ -104,7 +104,7 @@ def update_firmware():
                     open(file_path, 'w').write(file_data)
 
                 APP.decoder.firmware_file = file_path
-                APP.decoder.firmware_length = len(filter(lambda x: x[0] == ':', file_data) )
+                APP.decoder.firmware_length = len([x for x in file_data if x[0] == ':'] )
 
             zf.close()
 
@@ -126,7 +126,7 @@ def update_firmware():
         open(file_path, 'w').write(file_data)
 
         APP.decoder.firmware_file = file_path
-        APP.decoder.firmware_length = len(filter(lambda x: x[0] == ':', file_data) )
+        APP.decoder.firmware_length = len([x for x in file_data if x[0] == ':'] )
 
         APP.jinja_env.globals['firmware_update_available'] = False
 
@@ -147,7 +147,7 @@ def firmware():
         open(file_path, 'w').write(data)
 
         APP.decoder.firmware_file = file_path
-        APP.decoder.firmware_length = len(filter(lambda x: x[0] == ':', data))
+        APP.decoder.firmware_length = len([x for x in data if x[0] == ':'])
 
         return render_template('updater/firmware_upload.html')
 

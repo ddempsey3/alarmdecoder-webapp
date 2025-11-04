@@ -7,8 +7,7 @@ import smtplib
 import threading
 from email.mime.text import MIMEText
 from email.utils import formatdate
-from urlparse import urlparse
-import sleekxmpp
+from urllib.parse import urlparse
 import json
 import re
 import ssl
@@ -62,22 +61,9 @@ from xml.etree.ElementTree import tostring
 import ast
 
 #https connection support - used for prowl, Matrix, custom post notifiation, etc.
-try:
-    from http.client import HTTPSConnection
-except ImportError:
-    from httplib import HTTPSConnection
-
-
 #normal http connection support (future POST to custom url)
-try:
-    from http.client import HTTPConnection
-except ImportError:
-    from httplib import HTTPConnection
-
-try:
-    from urllib.parse import urlencode, quote
-except ImportError:
-    from urllib import urlencode, quote
+from http.client import HTTPConnection, HTTPSConnection
+from urllib.parse import urlencode, quote
 
 import logging
 try:
@@ -114,7 +100,7 @@ def raise_with_stack(func):
         except Exception as e:
             tb = traceback.format_exc(e).splitlines()
             # Grab error and line number
-            raise StandardError("%s %s" % (repr(e), tb[3].split(",")[1].strip()))
+            raise Exception("%s %s" % (repr(e), tb[3].split(",")[1].strip()))
 
     return wrapped
 
@@ -189,7 +175,7 @@ class NotificationSystem(object):
     def send(self, type, **kwargs):
         errors = []
 
-        for id, n in self._notifiers.iteritems():
+        for id, n in list(self._notifiers.items()):
             if n and n.subscribes_to(type, **kwargs):
                 try:
                     message, rawmessage = self._build_message(type, **kwargs)
@@ -211,7 +197,7 @@ class NotificationSystem(object):
                         else:
                             n.send(type, message, rawmessage)
 
-                except Exception, err:
+                except Exception as err:
                     errors.append('Exception in notification {0}.send(): {1}'.format(n.__class__.__name__,str(err)))
 
         return errors
@@ -232,7 +218,7 @@ class NotificationSystem(object):
             if n:
                 n.send(None, 'Test Notification', None)
 
-        except Exception, err:
+        except Exception as err:
             return str(err)
         else:
             return None
@@ -256,7 +242,7 @@ class NotificationSystem(object):
         try:
             # if we find the host:callback in _subscribers then
             # updated it and return the same subscription ID back.
-            for k, v in self._subscribers.items():
+            for k, v in list(self._subscribers.items()):
                 if v['host'] == host and v['callback'] == callback:
                     sub_uuid = k
                     break
@@ -272,7 +258,7 @@ class NotificationSystem(object):
 
             current_app.logger.info('add_subscriber: {0}'.format(sub_uuid))
 
-        except Exception, err:
+        except Exception as err:
             current_app.logger.error('Error adding subscriber for host:{0} callback:{1} timeout:{2} err: {3}'.format(host, callback, timeout, str(err)))
 
         return sub_uuid
@@ -375,16 +361,18 @@ class NotificationSystem(object):
                 if notifier['notification'].suppress > 0 and self._check_suppress(notifier):
                     self._remove_suppressed_zone(notifier['zone'])
 
-            except Exception, err:
+            except Exception as err:
                 errors.append('Error sending notification for {0}: {1}'.format(notifier['notification'].description, str(err)))
 
         for notifier in self._wait_list:
             try:
+                print("time check")
                 if time.time() >= notifier['message_send_time']:
                     notifier['notification'].send(notifier['type'], notifier['message'], notifier['raw'])
                     self._wait_list.remove(notifier)
 
-            except Exception, err:
+            except Exception as err:
+                print("error")
                 errors.append('Error sending notification for {0}: {1}'.format(notifier['notification'].description, str(err)))
 
         return errors
@@ -443,17 +431,12 @@ class NotificationThread(threading.Thread):
                         f = notifier._futures[i]
                         if f.done():
                             extra_msg = ""
-                            try:
-                                date = f.result()
-                            except Exception as exc:
-                                extra_msg = exc
-                            else:
-                                extra_msg = 'no exceptions'
+                            date = f.result()
 
                             with self._decoder.app.app_context():
                                 current_app.logger.info('Background notification function {0} finished with {1}.'.format(f.fcname, extra_msg))
 
-                            remove.append(f);
+                            remove.append(f)
 
                     for f in remove:
                         notifier._futures.remove(f)
@@ -468,12 +451,12 @@ class NotificationThread(threading.Thread):
 
 class BaseNotification(object):
     def __init__(self, obj):
-        if 'subscriptions' in obj.settings.keys():
-            self._subscriptions = {int(k): v for k, v in json.loads(obj.settings['subscriptions'].value).iteritems()}
+        if 'subscriptions' in list(obj.settings.keys()):
+            self._subscriptions = {int(k): v for k, v in list(json.loads(obj.settings['subscriptions'].value).items())}
         else:
             self._subscriptions = {}
 
-        if 'zone_filter' in obj.settings.keys():
+        if 'zone_filter' in list(obj.settings.keys()):
             self._zone_filters = [int(k) for k in json.loads(obj.settings['zone_filter'].value)]
         else:
             self._zone_filters = []
@@ -490,7 +473,7 @@ class BaseNotification(object):
         self.suppress = obj.get_setting('suppress', default=True)
 
     def subscribes_to(self, type, **kwargs):
-        if type in self._subscriptions.keys():
+        if type in list(self._subscriptions.keys()):
             if type in (ZONE_FAULT, ZONE_RESTORE, BYPASS):
                 zone = kwargs.get('zone', -1)
                 if int(zone if zone else -1) in self._zone_filters:
@@ -557,7 +540,7 @@ class UPNPPushNotification(BaseNotification):
             self._build_property("rawmessage", raw, True),
             panelState
         )
-        for k, v in subscribers.items():
+        for k, v in list(subscribers.items()):
             self._send_notify_event(k, v['callback'], response)
 
     def _build_panel_state(self):
@@ -570,7 +553,7 @@ class UPNPPushNotification(BaseNotification):
             mode = 'UNKNOWN'
 
         relay_status = Element("panel_relay_status")
-        for (address, channel), value in current_app.decoder.device._relay_status.items():
+        for (address, channel), value in list(current_app.decoder.device._relay_status.items()):
             child = Element("r") # keep it small
             SubElement(child,"a").text = str(address)
             SubElement(child,"c").text = str(channel)
@@ -578,7 +561,7 @@ class UPNPPushNotification(BaseNotification):
             relay_status.append(child)
 
         faulted_zones = Element("panel_zones_faulted")
-        for zid, z in current_app.decoder.device._zonetracker.zones.iteritems():
+        for zid, z in list(current_app.decoder.device._zonetracker.zones.items()):
             if z.status != ADZone.CLEAR:
                 child = Element("z") # keep it small
                 child.text = str(z.zone)
@@ -603,7 +586,7 @@ class UPNPPushNotification(BaseNotification):
 
         # convert to XML
         el = Element("panelstate")
-        for key, val in ret.items():
+        for key, val in list(ret.items()):
             child = Element(key)
             child.text = str(val)
             el.append(child)
@@ -639,7 +622,7 @@ class UPNPPushNotification(BaseNotification):
             app = current_app
 
         # Remove <> that surround the real unicode url if they exist...
-        notify_url = notify_url.translate({ord(k): u"" for k in "<>"})
+        notify_url = notify_url.translate({ord(k): "" for k in "<>"})
         parsed_url = urlparse(notify_url)
 
         headers = {
@@ -719,7 +702,7 @@ class MatrixNotification(BaseNotification):
 
 
                 #replace placeholder values with actual values
-                for key,val in notify_data.items():
+                for key,val in list(notify_data.items()):
                     if val == CUSTOM_REPLACER_SEARCH[CUSTOM_TIMESTAMP]:
                         notify_data[key] = time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(time.time())) # ex: 2016-12-02 10:33:19 PST
                     if val == CUSTOM_REPLACER_SEARCH[CUSTOM_MESSAGE]:
@@ -751,11 +734,7 @@ class MatrixNotification(BaseNotification):
 
         parsed_url = urlparse("https://" + self.api_endpoint + "/_matrix/client/r0/rooms/" + self.api_room_id + "/send/m.room.message?access_token=" + self.api_token)
 
-        if sys.version_info >= (2,7,9):
-            http_handler = HTTPSConnection(parsed_url.netloc, context=ssl._create_unverified_context())
-        else:
-            http_handler = HTTPSConnection(parsed_url.netloc)
-
+        http_handler = HTTPSConnection(parsed_url.netloc, context=ssl._create_unverified_context())
         http_handler.request(CUSTOM_METHOD, parsed_url.path+"?"+parsed_url.query, headers=self.headers, body=data)
         http_response = http_handler.getresponse()
 
@@ -1002,11 +981,7 @@ class ProwlNotification(BaseNotification):
 
             self.msg_to_send = text + " From " + self.notification_description + "."
 
-            if sys.version_info >= (2,7,9):
-                http_handler = HTTPSConnection(PROWL_URL, context=ssl._create_unverified_context())
-            else:
-                http_handler = HTTPSConnection(PROWL_URL)
-
+            http_handler = HTTPSConnection(PROWL_URL, context=ssl._create_unverified_context())
             http_handler.request(PROWL_METHOD, PROWL_PATH, headers=self.headers,body=urlencode(notify_data))
 
             http_response = http_handler.getresponse()
@@ -1105,7 +1080,7 @@ class CustomNotification(BaseNotification):
 
     def _dict_to_xml(self,tag, d):
         el = Element(tag)
-        for key, val in d.items():
+        for key, val in list(d.items()):
             child = Element(key)
             child.text = str(val)
             el.append(child)
@@ -1127,12 +1102,11 @@ class CustomNotification(BaseNotification):
             app = current_app
 
         if self.is_ssl:
-            if sys.version_info >= (2,7,9):
-                http_handler = HTTPSConnection(self.url, context=ssl._create_unverified_context(), timeout=10)
-            else:
-                http_handler = HTTPSConnection(self.url, timeout=10)
+            http_handler = HTTPSConnection(self.url, context=ssl._create_unverified_context(), timeout=10)
         else:
             http_handler = HTTPConnection(self.url, timeout=10)
+        
+        print("_do_post: " + self.url)
 
         http_handler.request(CUSTOM_METHOD, self.path, headers=self.headers, body=data)
         http_response = http_handler.getresponse()
@@ -1148,23 +1122,22 @@ class CustomNotification(BaseNotification):
     @threaded
     @raise_with_stack
     def _do_get(self, data, app=None):
-
+        print("in do get")
         # If threaded app will be valid if not it will be None.
         # We need app to send logs and access static values only.
         if app is None:
             app = current_app
 
         if self.is_ssl:
-            if sys.version_info >= (2,7,9):
-                http_handler = HTTPSConnection(self.url, context=ssl._create_unverified_context())
-            else:
-                http_handler = HTTPSConnection(self.url)
+            http_handler = HTTPSConnection(self.url, context=ssl._create_unverified_context())
         else:
             http_handler = HTTPConnection(self.url)
 
         get_path = self.path + '?' + data
+        print(get_path)
         http_handler.request(CUSTOM_METHOD_GET, get_path, headers=self.headers)
         http_response = http_handler.getresponse()
+        print("do get done " + http_response.status)
 
         if http_response.status == 200:
             return True
@@ -1174,6 +1147,7 @@ class CustomNotification(BaseNotification):
 
     @raise_with_stack
     def send(self, type, text, raw):
+        print("custom notification send")
         self.msg_to_send = text
 
         result = False
@@ -1191,7 +1165,7 @@ class CustomNotification(BaseNotification):
 
             #replace placeholder values with actual values
             if notify_data:
-                for key,val in notify_data.items():
+                for key,val in list(notify_data.items()):
                     if val == CUSTOM_REPLACER_SEARCH[CUSTOM_TIMESTAMP]:
                         notify_data[key] = time.strftime("%Y-%m-%d %H:%M:%S %Z", time.localtime(time.time())) # ex: 2016-12-02 10:33:19 PST
                     if val == CUSTOM_REPLACER_SEARCH[CUSTOM_MESSAGE]:

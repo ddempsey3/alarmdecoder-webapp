@@ -28,6 +28,8 @@ sys.path.insert(0,"/opt/alarmdecoder")
 
 from ad2web import create_app, init_app
 
+# application, appsocket = create_app()
+
 class SocketIOThread(threading.Thread):
 	def __init__(self, appsocket):
 		threading.Thread.__init__(self)
@@ -38,5 +40,5 @@ class SocketIOThread(threading.Thread):
 
 application, appsocket = create_app()
 init_app(application, appsocket)
-socket_thread = SocketIOThread(appsocket)
-socket_thread.start()
+# socket_thread = SocketIOThread(appsocket)
+# socket_thread.start()

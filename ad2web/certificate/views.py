@@ -88,7 +88,7 @@ def view(certificate_id):
 @certificate.route('/<int:certificate_id>/download/<download_type>')
 @login_required
 def download(certificate_id, download_type):
-    if not download_type in PACKAGE_TYPE_LOOKUP.keys():
+    if not download_type in list(PACKAGE_TYPE_LOOKUP.keys()):
         abort(404)
 
     use_ssl = Setting.get_by_name('use_ssl', default=False).value

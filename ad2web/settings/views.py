@@ -1,4 +1,6 @@
 # -*- coding: utf-8 -*-
+from gevent import monkey
+monkey.patch_all()
 
 import os
 import platform
@@ -15,7 +17,6 @@ try:
 except ImportError:
     hasnetifaces = 0
 import sh
-import compiler
 import sys
 import types
 import importlib
@@ -27,8 +28,7 @@ try:
 except ImportError:
     has_upnp = False
 
-from compiler.ast import Discard, Const
-from compiler.visitor import ASTVisitor
+from ast import Expr, Constant, NodeVisitor
 
 from datetime import datetime, timedelta
 
@@ -61,7 +61,7 @@ try:
 except ImportError:
     hasservice = False
 
-import urllib2
+import urllib.request, urllib.error, urllib.parse
 import ssl
 
 settings = Blueprint('settings', __name__, url_prefix='/settings')
@@ -220,7 +220,7 @@ def get_ethernet_info(device):
 
         eth_properties['device'] = device
         eth_properties['ipv4'] = addresses[netifaces.AF_INET]
-        if netifaces.AF_INET6 in addresses.keys():
+        if netifaces.AF_INET6 in list(addresses.keys()):
             eth_properties['ipv6'] = addresses[netifaces.AF_INET6]
         eth_properties['mac_address'] = addresses[netifaces.AF_LINK]
         eth_properties['default_gateway'] = gateways['default'][netifaces.AF_INET]
@@ -425,7 +425,7 @@ def _parse_network_file():
     text = open(NETWORK_FILE, 'r').read()
     #iface string should also contain dhcp/static address gateway netmask information according to the RE
     indexes = [s.start() for s in re.finditer('auto|iface|source|mapping|allow-|wpa-', text)]
-    result = map(text.__getslice__, indexes, indexes[1:] + [len(text)])
+    result = list(map(text.__getslice__, indexes, indexes[1:] + [len(text)]))
 
     return result
 
@@ -468,7 +468,7 @@ def _get_cpu_temperature():
     if os.path.isfile('/sys/class/thermal/thermal_zone0/temp'):
         with open('/sys/class/thermal/thermal_zone0/temp', 'r') as f:
             cpu_temperature = float(f.readline())
-	cpu_temperature_string = str(cpu_temperature / 1000)
+            cpu_temperature_string = str(cpu_temperature / 1000)
         return cpu_temperature_string
     else:
         return 'not supported'
@@ -595,7 +595,7 @@ def switch_branch():
             rtypes.sort()
             temp_remote_dict[key] = url + " (" + ", ".join(rtypes) + ")"
 
-        return [(k,"%s - %s" % (k,v)) for k,v in temp_remote_dict.items()]
+        return [(k,"%s - %s" % (k,v)) for k,v in list(temp_remote_dict.items())]
 
     # First gather data about the api and webapp git state
     #
@@ -758,7 +758,7 @@ def import_backup():
                         continue
                     else:
                         filename = os.path.basename(member.name)
-                        if filename in EXPORT_MAP.keys():
+                        if filename in list(EXPORT_MAP.keys()):
                             _import_model(tar, member, EXPORT_MAP[filename])
 
                 db.session.commit()
@@ -770,11 +770,11 @@ def import_backup():
 
                 return redirect(url_for('frontend.index'))
 
-        except (tarfile.ReadError, KeyError), err:
+        except (tarfile.ReadError, KeyError) as err:
             current_app.logger.error('Import Error: {0}'.format(err))
             flash('Import Failed: Not a valid AlarmDecoder archive.', 'error')
 
-        except (SQLAlchemyError, ValueError), err:
+        except (SQLAlchemyError, ValueError) as err:
             db.session.rollback()
 
             current_app.logger.error('Import Error: {0}'.format(err))
@@ -792,7 +792,7 @@ def _import_model(tar, tarinfo, model):
 
     for itm in items:
         m = model()
-        for k, v in itm.iteritems():
+        for k, v in list(itm.items()):
             if isinstance(model.__table__.columns[k].type, db.DateTime) and v is not None:
                 v = datetime.strptime(v, '%Y-%m-%d %H:%M:%S.%f')
 
@@ -860,7 +860,7 @@ def advanced():
 def get_system_imports():
     imported = {}
     module_list = []
-    for module in sys.modules.keys():  #get list of all modules loaded into memory
+    for module in list(sys.modules.keys()):  #get list of all modules loaded into memory
         module_name = module.split('.')[0] #everything left of a .
         if module_name.find('_') == -1:  #ignore items containing _
             if module_name not in module_list:  #unique module list
@@ -892,7 +892,7 @@ def get_system_imports():
 @admin_required
 def disable_forwarding():
     if not has_upnp:
-        flash(u'Missing library: miniupnpc - install using pip', 'error')
+        flash('Missing library: miniupnpc - install using pip', 'error')
         return redirect(url_for('settings.index'))
 
     current_external_port = Setting.get_by_name('upnp_external_port',default=None)
@@ -908,9 +908,9 @@ def disable_forwarding():
             db.session.commit()
 
     except Exception as ex:
-        flash(u'Unable to remove port forward - {0}'.format(ex), 'error')
+        flash('Unable to remove port forward - {0}'.format(ex), 'error')
     else:
-        flash(u'Port Forward removed successfully.', 'info')
+        flash('Port Forward removed successfully.', 'info')
 
     return redirect(url_for('settings.index'))
 
@@ -926,7 +926,7 @@ def port_forwarding():
     current_internal_port = Setting.get_by_name('upnp_internal_port',default=None).value
     current_external_port = Setting.get_by_name('upnp_external_port',default=None).value
     if not has_upnp:
-        flash(u'Missing library: miniupnpc - install using pip', 'error')
+        flash('Missing library: miniupnpc - install using pip', 'error')
 
     if not form.is_submitted():
         form.internal_port.data = Setting.get_by_name('upnp_internal_port',default=443).value
@@ -949,13 +949,13 @@ def port_forwarding():
                 #add new bindings
                 upnp.addPortForward(internal_port.value, external_port.value)
             except Exception as ex:
-                flash(u'Error setting up port forwarding: {0}'.format(ex), 'error')
+                flash('Error setting up port forwarding: {0}'.format(ex), 'error')
             else:
-                flash(u'Port forwarding created successfully.', 'info')
+                flash('Port forwarding created successfully.', 'info')
 
 
         else:
-            flash(u'Missing library: miniupnpc - install using pip', 'error')
+            flash('Missing library: miniupnpc - install using pip', 'error')
 
         db.session.add(internal_port)
         db.session.add(external_port)
@@ -967,7 +967,7 @@ def port_forwarding():
 
 def get_external_ip():
     try:
-        my_ip = json.load(urllib2.urlopen(IP_CHECK_SERVER_URL, context=ssl._create_unverified_context()))['origin']
+        my_ip = json.load(urllib.request.urlopen(IP_CHECK_SERVER_URL, context=ssl._create_unverified_context()))['origin']
     except Exception as e:
         return None
 
@@ -1129,9 +1129,9 @@ class ImportVisitor(object):
         def default(self, node):
             pragma = None
             if self.recent:
-                if isinstance(node, Discard):
+                if isinstance(node, Expr):
                     children = node.getChildren()
-                    if len(children) == 1 and isinstance(children[0], Const):
+                    if len(children) == 1 and isinstance(children[0], Constant):
                         const_node = children[0]
                         pragma = const_node.value
 
@@ -1143,18 +1143,18 @@ class ImportVisitor(object):
             self.recent = []
 
         def finalize(self):
-            self.accept_imports();
+            self.accept_imports()
             return self.modules
 
 
-class ImportWalker(ASTVisitor):
+class ImportWalker(NodeVisitor):
     def __init__(self, visitor):
-        ASTVisitor.__init__(self)
+        NodeVisitor.__init__(self)
         self._visitor = visitor
 
     def default( self, node, *args):
         self._visitor.default(node)
-        ASTVisitor.default(self, node, *args)
+        NodeVisitor.default(self, node, *args)
 
 
 def parse_python_source(fn):

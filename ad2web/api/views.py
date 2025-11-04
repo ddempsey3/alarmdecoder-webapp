@@ -1,5 +1,8 @@
 # -*- coding: utf-8 -*-
 
+from gevent import monkey
+monkey.patch_all()
+
 import json
 import sh
 import os
@@ -7,7 +10,7 @@ import socket
 
 from functools import wraps
 from datetime import timedelta
-from httplib import OK, CREATED, ACCEPTED, NO_CONTENT, UNAUTHORIZED, NOT_FOUND, CONFLICT, UNPROCESSABLE_ENTITY, SERVICE_UNAVAILABLE
+from http.client import OK, CREATED, ACCEPTED, NO_CONTENT, UNAUTHORIZED, NOT_FOUND, CONFLICT, UNPROCESSABLE_ENTITY, SERVICE_UNAVAILABLE
 
 from flask import Blueprint, current_app, request, jsonify, abort, Response, render_template, redirect, url_for
 from flask_login import login_user, current_user, logout_user, login_required
@@ -164,7 +167,7 @@ def alarmdecoder():
         mode = 'UNKNOWN'
 
     relay_status = []
-    for (address, channel), value in current_app.decoder.device._relay_status.items():  # TODO: test this.
+    for (address, channel), value in list(current_app.decoder.device._relay_status.items()):  # TODO: test this.
         relay_status.append({
             'address': address,
             'channel': channel,
@@ -172,7 +175,7 @@ def alarmdecoder():
         })
 
     faulted_zones = []
-    for zid, z in current_app.decoder.device._zonetracker.zones.iteritems():
+    for zid, z in list(current_app.decoder.device._zonetracker.zones.items()):
         if z.status != ADZone.CLEAR:
             faulted_zones.append(z.zone)
 
@@ -514,7 +517,7 @@ def _build_notification_data(notification, short=False):
     if not short:
         settings = { }
 
-        for setting_name, setting in notification.settings.items():
+        for setting_name, setting in list(notification.settings.items()):
             # NOTE: Leaving authentication information out on purpose.  May need to expand this or do it a different way.
             if setting_name == 'username' or setting_name == 'password':
                 continue
@@ -529,7 +532,7 @@ def _build_notification_data(notification, short=False):
                 for event_type in EVENT_TYPES:
                     output[EVENT_TYPES[event_type]] = False
 
-                for k in value.keys():
+                for k in list(value.keys()):
                     output[EVENT_TYPES[int(k)]] = value[k]
                     del value[k]
 
@@ -578,12 +581,12 @@ def notifications():
         notification = Notification(type=notification_type, description=description, user_id=user_id)
 
         settings = req.get('settings', None)
-        for name, value in settings.items():
+        for name, value in list(settings.items()):
             if name == 'subscriptions':
-                event_types = {v: k for k, v in EVENT_TYPES.iteritems()}
+                event_types = {v: k for k, v in list(EVENT_TYPES.items())}
 
                 subscriptions_out = {}
-                for k, v in value.iteritems():
+                for k, v in list(value.items()):
                     subscriptions_out[str(event_types[k])] = v
 
                 value = json.dumps(subscriptions_out)
@@ -632,16 +635,16 @@ def notifications_by_id(id):
             notification.user_id = user_id
 
         if settings is not None:
-            for name, value in settings.items():
+            for name, value in list(settings.items()):
                 setting = notification.settings.get(name, None)
                 if setting is None:
                     setting = NotificationSetting(name=name)
 
                 if name == 'subscriptions':
-                    event_types = {v: k for k, v in EVENT_TYPES.iteritems()}
+                    event_types = {v: k for k, v in list(EVENT_TYPES.items())}
 
                     subscriptions_out = {}
-                    for k, v in value.iteritems():
+                    for k, v in list(value.items()):
                         subscriptions_out[str(event_types[k])] = v
 
                     value = json.dumps(subscriptions_out)
@@ -844,8 +847,8 @@ def users():
             return jsonify(build_error(ERROR_RECORD_ALREADY_EXISTS, 'User already exists with the specified username.')), CONFLICT
 
         # Convert role/status fields into what they should be.
-        role_types = {v: k for k, v in USER_ROLE.iteritems()}
-        status_types = {v: k for k, v in USER_STATUS.iteritems()}
+        role_types = {v: k for k, v in list(USER_ROLE.items())}
+        status_types = {v: k for k, v in list(USER_STATUS.items())}
 
         role = role_types[role]
         status = status_types[status]
@@ -886,8 +889,8 @@ def users_by_id(id):
         status = req.get('status', None)
 
         # Convert role/status fields into what they should be.
-        role_types = {v: k for k, v in USER_ROLE.iteritems()}
-        status_types = {v: k for k, v in USER_STATUS.iteritems()}
+        role_types = {v: k for k, v in list(USER_ROLE.items())}
+        status_types = {v: k for k, v in list(USER_STATUS.items())}
 
         if name is not None:
             user.name = name

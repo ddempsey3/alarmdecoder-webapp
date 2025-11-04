@@ -40,9 +40,9 @@ MALE = 1
 FEMALE = 2
 OTHER = 9
 SEX_TYPE = {
-    MALE: u'Male',
-    FEMALE: u'Female',
-    OTHER: u'Other',
+    MALE: 'Male',
+    FEMALE: 'Female',
+    OTHER: 'Other',
 }
 
 # Model
@@ -82,9 +82,9 @@ def pretty_date(dt, default=None):
             continue
 
         if period == 1:
-            return u'%d %s ago' % (period, singular)
+            return '%d %s ago' % (period, singular)
         else:
-            return u'%d %s ago' % (period, plural)
+            return '%d %s ago' % (period, plural)
 
     return default
 
@@ -102,7 +102,7 @@ def make_dir(dir_path):
     try:
         if not os.path.exists(dir_path):
             os.mkdir(dir_path)
-    except Exception, e:
+    except Exception as e:
         raise e
 
 
@@ -110,7 +110,7 @@ def tar_add_directory(tar, name):
     ti = tarfile.TarInfo(name=name)
     ti.mtime = time.time()
     ti.type = tarfile.DIRTYPE
-    ti.mode = 0755
+    ti.mode = 0o755
     tar.addfile(ti)
 
 

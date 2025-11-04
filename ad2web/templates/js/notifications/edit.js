@@ -36,12 +36,12 @@
                 iCnt++;
         }
 
-        $('#custom_values').css("list-style-type", "none");
-        for( var cnt = 0; cnt < iCnt; cnt++ )
-        {
-            $("label[for='custom_values-" + cnt + "']").hide();
-            $("label[for='custom_values-" + cnt + "-csrf_token']").hide();
-        }
+        // $('#custom_values').css("list-style-type", "none");
+        // for( var cnt = 0; cnt < iCnt; cnt++ )
+        // {
+        //     $("label[for='custom_values-" + cnt + "']").hide();
+        //     $("label[for='custom_values-" + cnt + "-csrf_token']").hide();
+        // }
         createFormTooltip('#description', 'Name of notification for display in list of notifications.');
 
         if( '{{ TYPES[notification.type] }}' == 'email' )

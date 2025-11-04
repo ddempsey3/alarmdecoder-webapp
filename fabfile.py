@@ -42,7 +42,7 @@ def setup():
 
     local("virtualenv env")
     activate_this = "env/bin/activate_this.py"
-    execfile(activate_this, dict(__file__=activate_this))
+    exec(compile(open(activate_this, "rb").read(), activate_this, 'exec'), dict(__file__=activate_this))
     local("python setup.py install")
     reset()
 
@@ -103,7 +103,7 @@ def certs():
         ser2sock.hup()
 
 def revoke_cert(name):
-    print 'Revoking: ', name
+    print(('Revoking: ', name))
 
     decoder = Decoder(None, None)
     app, appsocket = create_app()
@@ -123,9 +123,9 @@ def revoke_cert(name):
             db.session.add(cert)
             db.session.commit()
 
-            print name, 'successfully revoked.'
+            print((name, 'successfully revoked.'))
         else:
-            print name, 'not found.'
+            print((name, 'not found.'))
 
 def babel():
     """
