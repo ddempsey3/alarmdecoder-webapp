@@ -170,7 +170,7 @@ def init_app(app, appsocket):
                 app.logger.error("Could not find 'settings' table in the database.  You may need to run 'python manage.py initdb'.")
                 os._exit(0)
 
-    except Exception, err:
+    except (Exception) as err:
         app.logger.error("Error", exc_info=True)
 
 def configure_app(app, config=None):
